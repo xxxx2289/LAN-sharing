@@ -1,1 +1,55 @@
-build.yml
+name: Build LanRemote Android APK
+on:
+  push:
+    paths:
+      - 'LanRemote-WebRTC.zip'
+      - 'project-bundle.zip'
+      - '.github/workflows/build.yml'
+      - '**/*.kt'
+      - '**/*.kts'
+      - 'app/src/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract uploaded project ZIP
+        shell: bash
+        run: |
+          set -e
+          z=""
+          for f in LanRemote-WebRTC.zip project-bundle.zip; do
+            if [ -f "$f" ]; then z="$f"; break; fi
+          done
+          if [ -n "$z" ]; then
+            mkdir -p _extract
+            unzip -oq "$z" -d _extract
+            src="$(find _extract -name settings.gradle.kts -printf '%h\\n' | head -n1)"
+            test -n "$src"
+            cp -a "$src"/. .
+          fi
+          test -f settings.gradle.kts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - uses: android-actions/setup-android@v3
+      - name: Build debug APK
+        run: gradle --no-daemon clean assembleDebug
+      - name: Package source archive
+        run: zip -qr LanRemote-WebRTC-source.zip . -x '.git/*' '.gradle/*' 'app/build/*' '_extract/*' 'LanRemote-WebRTC.zip' 'project-bundle.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LanRemote-WebRTC-artifacts
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            LanRemote-WebRTC-source.zip
+          if-no-files-found: error
+          retention-days: 30
+
